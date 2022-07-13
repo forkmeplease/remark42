@@ -1,6 +1,7 @@
 FROM node:16.15.1-alpine AS frontend-deps
 
 ENV CI=true
+=======
 
 WORKDIR /srv/frontend
 
