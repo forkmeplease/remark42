@@ -24,12 +24,12 @@ type AllMessages = ChildMessage & ParentMessage;
  * @returns request success of fail
  */
 export function postMessageToParent(data: ParentMessage): boolean {
-  if (!window.parent || window.parent === window) {
-    return false;
+  if (window.parent !== window) {
+    window.parent.postMessage(data, '*');
+    return true;
   }
 
-  window.parent.postMessage(data, '*');
-  return true;
+  return false;
 }
 
 /**
