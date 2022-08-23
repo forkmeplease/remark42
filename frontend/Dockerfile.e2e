@@ -12,4 +12,4 @@ COPY ./e2e/tests /frontend/e2e/tests/
 
 WORKDIR /frontend/e2e
 
-RUN pnpm test
+CMD pnpm test
