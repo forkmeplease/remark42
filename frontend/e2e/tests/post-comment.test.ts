@@ -2,7 +2,7 @@ import { test } from "@playwright/test";
 
 test.describe("Post comment", () => {
 	test.beforeEach(async ({ page }) => {
-		await page.goto("http://127.0.0.1:8080/web/");
+		await page.goto("/web/");
 	});
 
 	test("as dev user", async ({ page }) => {

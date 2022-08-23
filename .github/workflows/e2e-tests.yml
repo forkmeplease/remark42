@@ -1,4 +1,4 @@
-name: frontend
+name: e2e
 
 on:
   push:
@@ -15,55 +15,18 @@ on:
 
 jobs:
   tests:
-    name: E2E Tests
+    name: Tests
     timeout-minutes: 60
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Setup Node
-        uses: actions/setup-node@v3
-        with:
-          node-version: "16.15.1"
-
-      - name: Start containers
-        run: COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker-compose -f compose-e2e-test.yml up -d --build
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v2.0.1
-        id: pnpm-install
-        with:
-          version: 7
-          run_install: false
-
-      - name: Get pnpm store directory
-        id: pnpm-cache
-        run: |
-          echo "::set-output name=pnpm_cache_dir::$(pnpm store path)"
-
-      - name: Setup pnpm cache
-        uses: actions/cache@v3
-        with:
-          path: ${{ steps.pnpm-cache.outputs.pnpm_cache_dir }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
-
-      - name: Install dependencies
-        run: pnpm i
-        working-directory: frontend/e2e
-
-      - name: Install Playwright Browsers
-        run: npx playwright install --with-deps
-        working-directory: frontend/e2e
-
-      - name: Run tests
-        run: pnpm test
-        working-directory: frontend/e2e
+      - name: Build & run containers
+        run: COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker-compose -f compose-e2e-test.yml up -d --build --quiet-pull
 
       - uses: actions/upload-artifact@v2
         with:
           name: playwright-report
-          path: playwright-report/
+          path: /playwright-report/
           retention-days: 30

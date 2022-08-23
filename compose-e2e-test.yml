@@ -13,14 +13,13 @@ services:
 
     image: umputun/remark42:dev
     container_name: "remark42"
-    hostname: "remark42"
 
     ports:
       - "8080:8080" # primary rest server
       - "8484:8084" # local oauth2 server
 
     environment:
-      - REMARK_URL=http://127.0.0.1:8181
+      - REMARK_URL=http://remark:8080
       - SECRET=12345
       - DEBUG=true
       - ADMIN_PASSWD=password
@@ -32,3 +31,10 @@ services:
       - AUTH_EMAIL_ENABLE=true
     volumes:
       - ./var:/srv/var
+
+  tests:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.e2e
+    volumes:
+      - ./playwright-report:/frontend/e2e/playwright-report
