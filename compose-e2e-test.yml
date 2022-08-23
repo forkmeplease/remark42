@@ -6,8 +6,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      platform: "linux/amd64"
       args:
-        - BUILDPLATFORM=linux/amd64
         - SKIP_BACKEND_TEST=true
         - SKIP_FRONTEND_TEST=true
 
