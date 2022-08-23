@@ -3,11 +3,15 @@ name: frontend
 on:
   push:
     branches: [master]
-    paths: ["frontend/apps/remark42/**"]
+    paths:
+      - "frontend/apps/remark42/**"
+      - "frontend/e2e/**"
 
   pull_request:
     branches: [master]
-    paths: ["frontend/apps/remark42/**"]
+    paths:
+      - "frontend/apps/remark42/**"
+      - "frontend/e2e/**"
 
 jobs:
   tests:
@@ -24,7 +28,7 @@ jobs:
           node-version: "16.15.1"
 
       - name: Start containers
-        run: docker-compose -f compose-e2e-test.yml up -d --build
+        run: COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker-compose -f compose-e2e-test.yml up -d --build
 
       - name: Install pnpm
         uses: pnpm/action-setup@v2.0.1
@@ -48,15 +52,15 @@ jobs:
 
       - name: Install dependencies
         run: pnpm i
-        working-directory: ./frontend/tests
+        working-directory: frontend/e2e
 
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps
-        working-directory: ./frontend/tests
+        working-directory: frontend/e2e
 
       - name: Run tests
         run: pnpm test
-        working-directory: ./frontend/tests
+        working-directory: frontend/e2e
 
       - uses: actions/upload-artifact@v2
         with:

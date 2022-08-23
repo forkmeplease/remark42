@@ -6,8 +6,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      platform: "linux/amd64"
       args:
+        - BUILDPLATFORM=linux/amd64
         - SKIP_BACKEND_TEST=true
         - SKIP_FRONTEND_TEST=true
 
@@ -17,10 +17,10 @@ services:
 
     ports:
       - "8080:8080" # primary rest server
-      - "8084:8084" # local oauth2 server
+      - "8484:8084" # local oauth2 server
 
     environment:
-      - REMARK_URL=http://127.0.0.1:8080
+      - REMARK_URL=http://127.0.0.1:8181
       - SECRET=12345
       - DEBUG=true
       - ADMIN_PASSWD=password
