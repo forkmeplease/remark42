@@ -15,14 +15,14 @@ services:
     container_name: "remark42"
 
     environment:
+      # remark42 hostname used for proper dev auth work for tests container which connects to it
+      # using the such hostname (unlike local development where 127.0.0.1 is used)
       - REMARK_URL=http://remark42:8080
       - SECRET=12345
       - DEBUG=true
       - ADMIN_PASSWD=password
-      - AUTH_DEV=true # activate local oauth "dev"
+      - AUTH_DEV=true # activate local OAuth "dev" listening on http://remark42:8084
       - ADMIN_SHARED_ID=dev_user # set admin flag for default user on local oauth2
-      - POSITIVE_SCORE=false # restricts comment's score to be only positive
-      - EDIT_TIME=5m # edit window
       - AUTH_ANON=true
       - AUTH_EMAIL_ENABLE=true
     volumes:
