@@ -34,4 +34,4 @@ services:
       dockerfile: Dockerfile.e2e
     depends_on: [remark42]
     volumes:
-      - ./playwright-report:/frontend/e2e/playwright-report
+      - /playwright-report:/frontend/e2e/playwright-report
