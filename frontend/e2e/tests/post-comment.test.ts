@@ -13,14 +13,25 @@ test.describe("Post comment", () => {
 
 		const authPage = await page.waitForEvent("popup");
 
-		await new Promise((resolve) => setTimeout(resolve, 5 * 1000));
+		await page.screenshot({
+			path: "/frontend/e2e/playwright-report/screenshots/page.png",
+			fullPage: true,
+		});
 		await authPage.screenshot({
-			path: "/playwright-report/screenshots/dev-user-sign-in.png",
+			path: "/frontend/e2e/playwright-report/screenshots/auth.png",
 			fullPage: true,
 		});
 		await authPage.locator("text=Authorize").click();
 		await page.locator("body").focus();
 		await iframe.locator("textarea").type("Hello World");
+		await page.screenshot({
+			path: "/frontend/e2e/playwright-report/screenshots/before-post.png",
+			fullPage: true,
+		});
 		await iframe.locator("text=Send").click();
+		await page.screenshot({
+			path: "/frontend/e2e/playwright-report/screenshots/after-post.png",
+			fullPage: true,
+		});
 	});
 });
