@@ -22,8 +22,10 @@ test.describe('Post comment', () => {
 		})
 		const iframe = page.frameLocator('iframe[name]')
 		await iframe.locator('text=Sign In').click()
-		await iframe.locator("[title='Sign In with Dev']").click()
-		const authPage = await page.waitForEvent('popup')
+		const [authPage] = await Promise.all([
+			page.waitForEvent('popup'),
+			iframe.locator("[title='Sign In with Dev']").click(),
+		])
 		await page.screenshot({
 			path: getPath('auth-popup'),
 			fullPage: true,
