@@ -590,12 +590,6 @@ func (s *ServerCommand) newServerApp(ctx context.Context) (*serverApp, error) {
 
 	var devAuth *provider.DevAuthServer
 	if s.Auth.Dev {
-		u, errURL := url.Parse(s.RemarkURL)
-		if errURL != nil {
-			_ = dataService.Close()
-			return nil, fmt.Errorf("can't parse Remark42 URL: %w", errURL)
-		}
-		authenticator.AddDevProvider(u.Hostname(), 8084)
 		da, errDevAuth := authenticator.DevAuth()
 		if errDevAuth != nil {
 			_ = dataService.Close()
