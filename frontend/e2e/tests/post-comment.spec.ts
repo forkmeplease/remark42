@@ -1,5 +1,14 @@
 import { test } from '@playwright/test'
-import { getScreenshotsPath } from 'lib/screenshots'
+import { nanoid } from 'nanoid'
+import * as path from 'path'
+
+const basePath = process.env.CI ? '/frontend/e2e/playwright-report/screenshots/' : './playwright-report/screenshots/'
+
+function getScreenshotsPath(params: { browserName: string; testName: string }) {
+	return function (name: string) {
+		return path.resolve(basePath, `${name}_${params.testName}_${params.browserName}.png`)
+	}
+}
 
 test.describe('Post comment', () => {
 	test.beforeEach(async ({ page }) => {
@@ -27,7 +36,8 @@ test.describe('Post comment', () => {
 		// triggers tab visibility and enables widget to re-render with auth state
 		await page.press('iframe[name]', 'Tab')
 		await iframe.locator('textarea').click()
-		await iframe.locator('textarea').type('Hello World')
+		const message = `Hello world! ${nanoid()}`
+		await iframe.locator('textarea').type(message)
 		await page.screenshot({
 			path: getPath('before-submit'),
 			fullPage: true,
@@ -37,5 +47,13 @@ test.describe('Post comment', () => {
 			path: getPath('after-submit'),
 			fullPage: true,
 		})
+
+		// checks if comment was posted
+		iframe.locator(`text=${message}`).first()
+
+		await page.reload()
+
+		// checks if saved comment is visible
+		iframe.locator(`text=${message}`).first()
 	})
 })
