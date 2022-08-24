@@ -28,3 +28,4 @@ debug.test
 *.test
 remark42
 /backend/var/
+playwright-report
