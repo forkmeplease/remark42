@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-pkgz/auth/token"
-	"github.com/golang-jwt/jwt"
+	"github.com/go-pkgz/auth/v2/token"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/jessevdk/go-flags"
 	"go.uber.org/goleak"
 
@@ -79,7 +79,7 @@ func TestServerApp_DevMode(t *testing.T) {
 	waitForHTTPServerStart(port)
 
 	providers := app.restSrv.Authenticator.Providers()
-	require.Equal(t, 9+1, len(providers), "extra auth provider")
+	require.Equal(t, 11+1, len(providers), "extra auth provider")
 	assert.Equal(t, "dev", providers[len(providers)-2].Name(), "dev auth provider")
 	// send ping
 	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/api/v1/ping", port))
@@ -107,7 +107,7 @@ func TestServerApp_AnonMode(t *testing.T) {
 	waitForHTTPServerStart(port)
 
 	providers := app.restSrv.Authenticator.Providers()
-	require.Equal(t, 9+1, len(providers), "extra auth provider for anon")
+	require.Equal(t, 11+1, len(providers), "extra auth provider for anon")
 	assert.Equal(t, "anonymous", providers[len(providers)-1].Name(), "anon auth provider")
 
 	client := http.Client{Timeout: 10 * time.Second}
@@ -250,7 +250,7 @@ func TestServerApp_WithSSL(t *testing.T) {
 
 	client := http.Client{
 		// prevent http redirect
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 
@@ -290,7 +290,8 @@ func TestServerApp_WithRemote(t *testing.T) {
 	port := chooseRandomUnusedPort()
 	_, err := p.ParseArgs([]string{"--admin-passwd=password", "--cache.type=none",
 		"--store.type=rpc", "--store.rpc.api=http://127.0.0.1",
-		"--port=" + strconv.Itoa(port), "--admin.type=rpc", "--admin.rpc.api=http://127.0.0.1", "--avatar.fs.path=/tmp"})
+		"--port=" + strconv.Itoa(port), "--avatar.fs.path=/tmp",
+		"--admin.type=rpc", "--admin.rpc.secret_per_site", "--admin.rpc.api=http://127.0.0.1"})
 	require.NoError(t, err)
 	opts.Auth.Github.CSEC, opts.Auth.Github.CID = "csec", "cid"
 	opts.BackupLocation, opts.Image.FS.Path = "/tmp", "/tmp"
@@ -351,6 +352,7 @@ func TestServerApp_Failed(t *testing.T) {
 	assert.EqualError(t, err, "invalid remark42 url demo.remark42.com")
 	t.Log(err)
 
+	// wrong store type
 	opts = ServerCommand{}
 	opts.SetCommon(CommonOpts{RemarkURL: "https://demo.remark42.com", SharedSecret: "123456"})
 
@@ -373,6 +375,19 @@ func TestServerApp_Failed(t *testing.T) {
 		"failed to make cache: cache backend initialization, redis PubSub initialisation: "+
 			"problem subscribing to channel remark42-cache on address wrong_address: "+
 			"dial tcp: address wrong_address: missing port in address")
+	t.Log(err)
+
+	// wrong apple private key type
+	opts = ServerCommand{}
+	opts.SetCommon(CommonOpts{RemarkURL: "https://demo.remark42.com", SharedSecret: "123456"})
+	p = flags.NewParser(&opts, flags.Default)
+	_, err = p.ParseArgs([]string{"--auth.apple.cid=123", "--auth.apple.tid=123",
+		"--auth.apple.kid=123", "--auth.apple.private-key-filepath=testdata/apple-bad.p8"})
+	assert.NoError(t, err)
+	_, err = opts.newServerApp(context.Background())
+	assert.EqualError(t, err,
+		"failed to make authenticator: an AppleProvider creating failed: "+
+			"provided private key is not ECDSA")
 	t.Log(err)
 }
 
@@ -442,6 +457,8 @@ func TestServerApp_DeprecatedArgs(t *testing.T) {
 		"--notify.telegram.token=abcd",
 		"--notify.telegram.timeout=3m",
 		"--notify.telegram.api=http://example.org",
+		"--auth.twitter.cid=123",
+		"--auth.twitter.csec=456",
 	}
 	assert.Empty(t, s.SMTP.Host)
 	assert.Empty(t, s.SMTP.Port)
@@ -467,6 +484,8 @@ func TestServerApp_DeprecatedArgs(t *testing.T) {
 			{Old: "notify.telegram.token", New: "telegram.token", Version: "1.9"},
 			{Old: "notify.telegram.timeout", New: "telegram.timeout", Version: "1.9"},
 			{Old: "notify.telegram.api", Version: "1.9"},
+			{Old: "auth.twitter.cid", Version: "1.14"},
+			{Old: "auth.twitter.csec", Version: "1.14"},
 		},
 		deprecatedFlags)
 	assert.Equal(t, "smtp.example.org", s.SMTP.Host)
@@ -590,14 +609,14 @@ func TestServerAuthHooks(t *testing.T) {
 	tkService.TokenDuration = time.Second
 
 	claims := token.Claims{
-		StandardClaims: jwt.StandardClaims{
-			Audience:  "remark",
+		RegisteredClaims: jwt.RegisteredClaims{
+			Audience:  jwt.ClaimStrings{"remark"},
 			Issuer:    "remark",
-			ExpiresAt: time.Now().Add(time.Second).Unix(),
-			NotBefore: time.Now().Add(-1 * time.Minute).Unix(),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Second)),
+			NotBefore: jwt.NewNumericDate(time.Now().Add(-1 * time.Minute)),
 		},
 		User: &token.User{
-			ID:   "dev",
+			ID:   "github_dev",
 			Name: "developer one",
 		},
 	}
@@ -618,10 +637,10 @@ func TestServerAuthHooks(t *testing.T) {
 	require.NoError(t, resp.Body.Close())
 	assert.Equal(t, http.StatusCreated, resp.StatusCode, "non-blocked user able to post")
 
-	// add comment with no-aud claim
-	claimsNoAud := claims
-	claimsNoAud.Audience = ""
-	tkNoAud, err := tkService.Token(claimsNoAud)
+	// try to add comment with no-aud claim
+	badClaimsNoAud := claims
+	badClaimsNoAud.Audience = jwt.ClaimStrings{""}
+	tkNoAud, err := tkService.Token(badClaimsNoAud)
 	require.NoError(t, err)
 	t.Logf("no-aud claims: %s", tkNoAud)
 	req, err = http.NewRequest("POST", fmt.Sprintf("http://localhost:%d/api/v1/comment", port),
@@ -636,14 +655,51 @@ func TestServerAuthHooks(t *testing.T) {
 	require.NoError(t, resp.Body.Close())
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode, "user without aud claim rejected, \n"+tkNoAud+"\n"+string(body))
 
-	// block user dev as admin
+	// try to add comment with multiple auds
+	badClaimsMultipleAud := claims
+	badClaimsMultipleAud.Audience = jwt.ClaimStrings{"remark", "second_aud"}
+	tkMultipleAuds, err := tkService.Token(badClaimsMultipleAud)
+	require.NoError(t, err)
+	t.Logf("multiple aud claims: %s", tkMultipleAuds)
+	req, err = http.NewRequest("POST", fmt.Sprintf("http://localhost:%d/api/v1/comment", port),
+		strings.NewReader(`{"text": "test 123", "locator":{"url": "https://radio-t.com/p/2018/12/29/podcast-631/",
+	"site": "remark"}}`))
+	require.NoError(t, err)
+	req.Header.Set("X-JWT", tkMultipleAuds)
+	resp, err = client.Do(req)
+	require.NoError(t, err)
+	body, err = io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode, "user with multiple auds claim rejected, \n"+tkMultipleAuds+"\n"+string(body))
+
+	// try to add comment without user set
+	badClaimsNoUser := claims
+	badClaimsNoUser.Audience = jwt.ClaimStrings{"remark"}
+	badClaimsNoUser.User = nil
+	tkNoUser, err := tkService.Token(badClaimsNoUser)
+	require.NoError(t, err)
+	t.Logf("no user claims: %s", tkNoUser)
+	req, err = http.NewRequest("POST", fmt.Sprintf("http://localhost:%d/api/v1/comment", port),
+		strings.NewReader(`{"text": "test 123", "locator":{"url": "https://radio-t.com/p/2018/12/29/podcast-631/",
+	"site": "remark"}}`))
+	require.NoError(t, err)
+	req.Header.Set("X-JWT", tkNoUser)
+	resp, err = client.Do(req)
+	require.NoError(t, err)
+	body, err = io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode, "user without user information rejected, \n"+tkNoUser+"\n"+string(body))
+
+	// block user github_dev as admin
 	req, err = http.NewRequest(http.MethodPut,
-		fmt.Sprintf("http://localhost:%d/api/v1/admin/user/dev?site=remark&block=1&ttl=10d", port), http.NoBody)
+		fmt.Sprintf("http://localhost:%d/api/v1/admin/user/github_dev?site=remark&block=1&ttl=10d", port), http.NoBody)
 	assert.NoError(t, err)
 	req.SetBasicAuth("admin", "password")
 	resp, err = client.Do(req)
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, resp.StatusCode, "user dev blocked")
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "user github_dev blocked")
 	b, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
@@ -682,7 +738,6 @@ func TestServerCommand_parseSameSite(t *testing.T) {
 
 	cmd := ServerCommand{}
 	for i, tt := range tbl {
-		tt := tt
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			assert.Equal(t, tt.res, cmd.parseSameSite(tt.inp))
 		})
@@ -707,6 +762,28 @@ func Test_splitAtCommas(t *testing.T) {
 	for i, tt := range tbl {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			assert.Equal(t, tt.res, splitAtCommas(tt.inp))
+		})
+	}
+}
+
+func Test_getAllowedDomains(t *testing.T) {
+	tbl := []struct {
+		s              ServerCommand
+		allowedDomains []string
+	}{
+		// correct example, parsed and returned as allowed domain
+		{ServerCommand{AllowedHosts: []string{}, CommonOpts: CommonOpts{RemarkURL: "https://remark42.example.org"}}, []string{"example.org"}},
+		{ServerCommand{AllowedHosts: []string{}, CommonOpts: CommonOpts{RemarkURL: "http://remark42.example.org"}}, []string{"example.org"}},
+		{ServerCommand{AllowedHosts: []string{}, CommonOpts: CommonOpts{RemarkURL: "http://localhost"}}, []string{"localhost"}},
+		// incorrect URLs, so Hostname is empty but returned list doesn't include empty string as it would allow any domain
+		{ServerCommand{AllowedHosts: []string{}, CommonOpts: CommonOpts{RemarkURL: "bad hostname"}}, []string{}},
+		{ServerCommand{AllowedHosts: []string{}, CommonOpts: CommonOpts{RemarkURL: "not_a_hostname"}}, []string{}},
+		// test removal of 'self', multiple AllowedHosts. No deduplication is expected
+		{ServerCommand{AllowedHosts: []string{"'self'", "example.org", "test.example.org", "remark42.com"}, CommonOpts: CommonOpts{RemarkURL: "https://example.org"}}, []string{"example.org", "test.example.org", "remark42.com", "example.org"}},
+	}
+	for i, tt := range tbl {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			assert.Equal(t, tt.allowedDomains, tt.s.getAllowedDomains())
 		})
 	}
 }
@@ -756,8 +833,9 @@ func prepServerApp(t *testing.T, fn func(o ServerCommand) ServerCommand) (*serve
 	_, err := p.ParseArgs([]string{"--admin-passwd=password", "--site=remark"})
 	require.NoError(t, err)
 	cmd.Avatar.FS.Path, cmd.Avatar.Type, cmd.BackupLocation, cmd.Image.FS.Path = "/tmp/remark42_test", "fs", "/tmp/remark42_test", "/tmp/remark42_test"
-	cmd.Store.Bolt.Path = fmt.Sprintf("/tmp/%d", cmd.Port)
 	cmd.Store.Bolt.Timeout = 10 * time.Second
+	cmd.Auth.Apple.CID, cmd.Auth.Apple.KID, cmd.Auth.Apple.TID = "cid", "kid", "tid"
+	cmd.Auth.Apple.PrivateKeyFilePath = "testdata/apple.p8"
 	cmd.Auth.Github.CSEC, cmd.Auth.Github.CID = "csec", "cid"
 	cmd.Auth.Google.CSEC, cmd.Auth.Google.CID = "csec", "cid"
 	cmd.Auth.Facebook.CSEC, cmd.Auth.Facebook.CID = "csec", "cid"
@@ -765,6 +843,7 @@ func prepServerApp(t *testing.T, fn func(o ServerCommand) ServerCommand) (*serve
 	cmd.Auth.Microsoft.CSEC, cmd.Auth.Microsoft.CID = "csec", "cid"
 	cmd.Auth.Twitter.CSEC, cmd.Auth.Twitter.CID = "csec", "cid"
 	cmd.Auth.Patreon.CSEC, cmd.Auth.Patreon.CID = "csec", "cid"
+	cmd.Auth.Discord.CSEC, cmd.Auth.Discord.CID = "csec", "cid"
 	cmd.Auth.Telegram = true
 	cmd.Telegram.Token = "token"
 	cmd.Auth.Email.Enable = true
@@ -785,7 +864,10 @@ func prepServerApp(t *testing.T, fn func(o ServerCommand) ServerCommand) (*serve
 	cmd.RestrictedNames = []string{"umputun", "bobuk"}
 	cmd.emailMsgTemplatePath = "../../templates/email_reply.html.tmpl"
 	cmd.emailVerificationTemplatePath = "../../templates/email_confirmation_subscription.html.tmpl"
+
 	cmd = fn(cmd)
+	// as is uses port, call it after fn which could set it
+	cmd.Store.Bolt.Path = fmt.Sprintf("/tmp/%d", cmd.Port)
 
 	app, ctx, cancel := createAppFromCmd(t, cmd)
 
@@ -804,12 +886,15 @@ func createAppFromCmd(t *testing.T, cmd ServerCommand) (*serverApp, context.Cont
 	ctx, cancel := context.WithCancel(context.Background())
 	app, err := cmd.newServerApp(ctx)
 	require.NoError(t, err)
-
-	rand.Seed(time.Now().UnixNano())
 	return app, ctx, cancel
 }
 
 func TestMain(m *testing.M) {
 	// ignore is added only for GitHub Actions, can't reproduce locally
-	goleak.VerifyTestMain(m, goleak.IgnoreTopFunction("net/http.(*Server).Shutdown"))
+	goleak.VerifyTestMain(
+		m,
+		goleak.IgnoreTopFunction("net/http.(*Server).Shutdown"),
+		// this will be fixed in https://github.com/hashicorp/golang-lru/issues/159
+		goleak.IgnoreTopFunction("github.com/hashicorp/golang-lru/v2/expirable.NewLRU[...].func1"),
+	)
 }

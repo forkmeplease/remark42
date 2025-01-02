@@ -4,20 +4,20 @@ title: Configure Instance without Subdomain
 
 ## How to configure remark42 without a subdomain
 
-All README examples show configurations with remark42 on its own subdomain, i.e., `https://remark42.example.com`. However, it is possible and sometimes desirable to run remark42 without a subdomain, but just under some path, i.e., `https://example.com/remark42`.
+All documentation examples show configurations with remark42 on its own subdomain, i.e., `https://remark42.example.com`. However, it is possible and sometimes desirable to run remark42 without a subdomain, but just under some path, i.e., `https://example.com/remark42`.
 
 - The frontend URL looks like this: `s.src = 'https://example.com/remark42/web/embed.js;`
 
-- The backend `REMARK_URL` parameter will be `https://example.com/remark42`
+- The backend `REMARK_URL` parameter will be `https://example.com/remark42`. `ALLOWED_HOSTS="'self'"` and `AUTH_SAME_SITE=strict` to make comments work only from the same domain.
 
-- And you also need to slightly modify the callback URL for the social media login API's:
+- And you also need to slightly modify the callback URL for the social media login APIs:
   - Facebook Valid OAuth Redirect URIs: `https://example.com/remark42/auth/facebook/callback`
   - Google Authorized redirect URIs: `https://example.com/remark42/auth/google/callback`
   - GitHub Authorised callback URL: `https://example.com/remark42/auth/github/callback`
 
-### docker-compose configuration
+### Docker Compose configuration
 
-Both Nginx and Caddy configuration below rely on remark42 available on hostname `remark42`, which is achieved by having `container_name: remark42` in docker-compose.
+Both Nginx and Caddy configuration below rely on remark42 available on hostname `remark42`, which is achieved by having `container_name: remark42` in Docker Compose configuration file.
 
 Example `docker-compose.yml`:
 
@@ -58,7 +58,27 @@ The `nginx.conf` would then look something like:
 
 ### Caddy configuration
 
-Example of Caddy configuration (`Caddyfile`) running remark42 service on `example.com/remark42/`:
+Example of Caddy 2 configuration (`Caddyfile`) running remark42 service on `example.com/remark42/`, proxying
+requests under the path /remark42 through to the docker container:
+
+```
+example.com {
+  root * /srv/www
+
+  log {
+    output file /logs/example.com.access.log
+  }
+
+  # remark42
+  handle_path /remark42* {
+    reverse_proxy remark42:8080
+  }
+
+  file_server
+}
+```
+
+If you are using a legacy version (v1) of Caddy, the following configuration would be appropriate:
 
 ```
 example.com {
@@ -66,7 +86,7 @@ example.com {
 	tls mail@example.com
 
 	root /srv/www
-	log  /logs/access.log
+	log  /logs/example.com.access.log
 
 	# remark42
 	proxy /remark42/ http://remark42:8080/ {

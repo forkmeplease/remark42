@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/go-chi/render"
-	cache "github.com/go-pkgz/lcw"
+	cache "github.com/go-pkgz/lcw/v2"
 	log "github.com/go-pkgz/lgr"
 	R "github.com/go-pkgz/rest"
 
@@ -136,7 +136,6 @@ func (m *Migrator) exportCtrl(w http.ResponseWriter, r *http.Request) {
 		exportFile := fmt.Sprintf("%s-%s.json.gz", siteID, time.Now().Format("20060102"))
 		w.Header().Set("Content-Type", "application/gzip")
 		w.Header().Set("Content-Disposition", "attachment;filename="+exportFile)
-		w.WriteHeader(http.StatusOK)
 		gzWriter := gzip.NewWriter(w)
 		defer func() {
 			if e := gzWriter.Close(); e != nil {
@@ -163,7 +162,7 @@ func (m *Migrator) remapCtrl(w http.ResponseWriter, r *http.Request) {
 		rest.SendErrorJSON(w, r, http.StatusBadRequest, err, "remap failed, bad given rules", rest.ErrDecode)
 		return
 	}
-	defer r.Body.Close()
+	defer r.Body.Close() //nolint gosec // we don't care about response body
 
 	// start remap procedure with mapper
 	go func() {

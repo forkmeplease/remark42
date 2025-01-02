@@ -16,15 +16,15 @@ import (
 
 // BoltDB implements store.Interface, represents multiple sites with multiplexing to different bolt dbs. Thread safe.
 // there are 6 types of top-level buckets:
-//  - comments for post in "posts" top-level bucket. Each url (post) makes its own bucket and each k:v pair is commentID:comment
-//  - history of all comments. They all in a single "last" bucket (per site) and key is defined by ref struct as ts+commentID
-//    value is not full comment but a reference combined from post-url+commentID
-//  - user to comment references in "users" bucket. It used to get comments for user. Key is userID and value
-//    is a nested bucket named userID with kv as ts:reference
-//  - users details in "user_details" bucket. Key is userID, value - UserDetailEntry
-//  - blocking info sits in "block" bucket. Key is userID, value - ts
-//  - counts per post to keep number of comments. Key is post url, value - count
-//  - readonly per post to keep status of manually set RO posts. Key is post url, value - ts
+//   - comments for post in "posts" top-level bucket. Each url (post) makes its own bucket and each k:v pair is commentID:comment
+//   - history of all comments. They all in a single "last" bucket (per site) and key is defined by ref struct as ts+commentID
+//     value is not full comment but a reference combined from post-url+commentID
+//   - user to comment references in "users" bucket. It used to get comments for user. Key is userID and value
+//     is a nested bucket named userID with kv as ts:reference
+//   - users details in "user_details" bucket. Key is userID, value - UserDetailEntry
+//   - blocking info sits in "block" bucket. Key is userID, value - ts
+//   - counts per post to keep number of comments. Key is post url, value - count
+//   - readonly per post to keep status of manually set RO posts. Key is post url, value - ts
 type BoltDB struct {
 	dbs map[string]*bolt.DB
 }
@@ -170,7 +170,7 @@ func (b *BoltDB) Find(req FindRequest) (comments []store.Comment, err error) {
 				return e
 			}
 
-			return bucket.ForEach(func(k, v []byte) error {
+			return bucket.ForEach(func(_, v []byte) error {
 				comment := store.Comment{}
 				if e = json.Unmarshal(v, &comment); e != nil {
 					return fmt.Errorf("failed to unmarshal: %w", e)
@@ -306,9 +306,8 @@ func (b *BoltDB) Info(req InfoRequest) ([]store.PostInfo, error) {
 		})
 
 		// set read-only from age and manual bucket
-		readOnlyAge := req.ReadOnlyAge
-		info.ReadOnly = readOnlyAge > 0 && !info.FirstTS.IsZero() && info.FirstTS.AddDate(0, 0, readOnlyAge).Before(time.Now())
-		if b.checkFlag(FlagRequest{Locator: req.Locator, Flag: ReadOnly}) {
+		info.ReadOnly = req.ReadOnlyAge > 0 && !info.FirstTS.IsZero() && info.FirstTS.AddDate(0, 0, req.ReadOnlyAge).Before(time.Now())
+		if !info.ReadOnly && b.checkFlag(FlagRequest{Locator: req.Locator, Flag: ReadOnly}) {
 			info.ReadOnly = true
 		}
 		return []store.PostInfo{info}, err
@@ -425,11 +424,11 @@ func (b *BoltDB) Close() error {
 }
 
 // Last returns up to max last comments for given siteID
-func (b *BoltDB) lastComments(siteID string, max int, since time.Time) (comments []store.Comment, err error) {
+func (b *BoltDB) lastComments(siteID string, maximum int, since time.Time) (comments []store.Comment, err error) {
 	comments = []store.Comment{}
 
-	if max > lastLimit || max == 0 {
-		max = lastLimit
+	if maximum > lastLimit || maximum == 0 {
+		maximum = lastLimit
 	}
 
 	bdb, err := b.db(siteID)
@@ -467,7 +466,7 @@ func (b *BoltDB) lastComments(siteID string, max int, since time.Time) (comments
 				continue
 			}
 			comments = append(comments, comment)
-			if len(comments) >= max {
+			if len(comments) >= maximum {
 				break
 			}
 		}
@@ -725,7 +724,7 @@ func (b *BoltDB) listDetails(loc store.Locator) (result []UserDetailEntry, err e
 	err = bdb.View(func(tx *bolt.Tx) error {
 		var entry UserDetailEntry
 		bucket := tx.Bucket([]byte(userDetailsBucketName))
-		return bucket.ForEach(func(userID, value []byte) error {
+		return bucket.ForEach(func(_, value []byte) error {
 			if err = json.Unmarshal(value, &entry); err != nil {
 				return fmt.Errorf("failed to unmarshal entry: %w", e)
 			}
@@ -780,7 +779,7 @@ func (b *BoltDB) deleteUserDetail(bdb *bolt.DB, userID string, userDetail UserDe
 	}
 
 	return bdb.Update(func(tx *bolt.Tx) error {
-		// updated entry is not empty and we need to store it's updated copy
+		// updated entry is not empty and we need to store its updated copy
 		err := b.save(tx.Bucket([]byte(userDetailsBucketName)), userID, entry)
 		if err != nil {
 			return fmt.Errorf("failed to update detail %s for %s: %w", userDetail, userID, err)
@@ -866,11 +865,10 @@ func (b *BoltDB) deleteUser(bdb *bolt.DB, siteID, userID string, mode store.Dele
 	// get list of commentID for all user's comment
 	comments := []commentInfo{}
 	for _, postInfo := range posts {
-		postInfo := postInfo
 		err = bdb.View(func(tx *bolt.Tx) error {
 			postsBkt := tx.Bucket([]byte(postsBucketName))
 			postBkt := postsBkt.Bucket([]byte(postInfo.URL))
-			err = postBkt.ForEach(func(postURL []byte, commentVal []byte) error {
+			err = postBkt.ForEach(func(_ []byte, commentVal []byte) error {
 				comment := store.Comment{}
 				if err = json.Unmarshal(commentVal, &comment); err != nil {
 					return fmt.Errorf("failed to unmarshal: %w", err)

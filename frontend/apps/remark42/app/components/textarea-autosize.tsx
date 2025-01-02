@@ -8,7 +8,7 @@ function autoResize(textarea: HTMLTextAreaElement) {
 }
 
 type Props = Omit<JSX.HTMLAttributes<HTMLTextAreaElement>, 'onInput'> & {
-  onInput?: (evt: JSX.TargetedEvent<HTMLTextAreaElement, Event>) => void;
+  onInput?(evt: JSX.TargetedEvent<HTMLTextAreaElement, Event>): void;
 };
 
 export const TextareaAutosize = forwardRef<HTMLTextAreaElement, Props>(({ onInput, value, ...props }, externalRef) => {
@@ -33,5 +33,5 @@ export const TextareaAutosize = forwardRef<HTMLTextAreaElement, Props>(({ onInpu
     }
   }, [value, ref]);
 
-  return <textarea {...props} data-testid={props.id} onInput={handleInput} value={value} ref={ref} />;
+  return <textarea {...props} data-testid={props.id} onInput={handleInput} value={value} ref={ref} dir="auto" />;
 });

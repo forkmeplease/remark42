@@ -547,12 +547,12 @@ func TestMemData_FlagListBlocked(t *testing.T) {
 	assert.NoError(t, err)
 
 	blockedList := toBlocked(vv)
-	var blockedIds = make([]string, len(blockedList))
+	var blockedIDs = make([]string, len(blockedList))
 	for i, x := range blockedList {
-		blockedIds[i] = x.ID
+		blockedIDs[i] = x.ID
 	}
 	require.Equal(t, 2, len(blockedList), b.metaUsers)
-	assert.ElementsMatch(t, []string{"user1", "user2"}, blockedIds)
+	assert.ElementsMatch(t, []string{"user1", "user2"}, blockedIDs)
 	t.Logf("%+v", blockedList)
 
 	// check block expiration
@@ -624,6 +624,7 @@ func TestMemData_DeleteComment(t *testing.T) {
 func TestMemData_Close(t *testing.T) {
 	b := prepMem(t)
 	assert.NoError(t, b.Close())
+	assert.NoError(t, b.Close(), "second call should not result in panic or errors")
 }
 
 func TestMemData_DeleteHard(t *testing.T) {

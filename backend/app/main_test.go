@@ -64,7 +64,7 @@ func TestMain_WithWebhook(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	var webhookSent int32
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		atomic.StoreInt32(&webhookSent, 1)
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 
@@ -121,9 +121,9 @@ func TestMain_WithWebhook(t *testing.T) {
 
 func TestGetDump(t *testing.T) {
 	dump := getDump()
-	assert.True(t, strings.Contains(dump, "goroutine"))
-	assert.True(t, strings.Contains(dump, "[running]"))
-	assert.True(t, strings.Contains(dump, "backend/app/main.go"))
+	assert.Contains(t, dump, "goroutine")
+	assert.Contains(t, dump, "[running]")
+	assert.Contains(t, dump, "backend/app/main.go")
 	t.Logf("\n dump: %s", dump)
 }
 
@@ -157,5 +157,7 @@ func TestMain(m *testing.M) {
 		m,
 		goleak.IgnoreTopFunction("github.com/umputun/remark42/backend/app.init.0.func1"),
 		goleak.IgnoreTopFunction("net/http.(*Server).Shutdown"),
+		// this will be fixed in https://github.com/hashicorp/golang-lru/issues/159
+		goleak.IgnoreTopFunction("github.com/hashicorp/golang-lru/v2/expirable.NewLRU[...].func1"),
 	)
 }

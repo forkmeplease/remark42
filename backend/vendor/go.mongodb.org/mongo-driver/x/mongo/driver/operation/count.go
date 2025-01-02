@@ -10,8 +10,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
+	"go.mongodb.org/mongo-driver/bson/bsontype"
 	"go.mongodb.org/mongo-driver/event"
+	"go.mongodb.org/mongo-driver/internal/driverutil"
 	"go.mongodb.org/mongo-driver/mongo/description"
 	"go.mongodb.org/mongo-driver/mongo/readconcern"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
@@ -22,11 +25,13 @@ import (
 
 // Count represents a count operation.
 type Count struct {
-	maxTimeMS      *int64
+	authenticator  driver.Authenticator
+	maxTime        *time.Duration
 	query          bsoncore.Document
 	session        *session.Client
 	clock          *session.ClusterClock
 	collection     string
+	comment        bsoncore.Value
 	monitor        *event.CommandMonitor
 	crypt          driver.Crypt
 	database       string
@@ -37,6 +42,7 @@ type Count struct {
 	retry          *driver.RetryMode
 	result         CountResult
 	serverAPI      *driver.ServerAPIOptions
+	timeout        *time.Duration
 }
 
 // CountResult represents a count result returned by the server.
@@ -116,11 +122,15 @@ func (c *Count) Execute(ctx context.Context) error {
 		Crypt:             c.crypt,
 		Database:          c.database,
 		Deployment:        c.deployment,
+		MaxTime:           c.maxTime,
 		ReadConcern:       c.readConcern,
 		ReadPreference:    c.readPreference,
 		Selector:          c.selector,
 		ServerAPI:         c.serverAPI,
-	}.Execute(ctx, nil)
+		Timeout:           c.timeout,
+		Name:              driverutil.CountOp,
+		Authenticator:     c.authenticator,
+	}.Execute(ctx)
 
 	// Swallow error if NamespaceNotFound(26) is returned from aggregate on non-existent namespace
 	if err != nil {
@@ -132,54 +142,24 @@ func (c *Count) Execute(ctx context.Context) error {
 	return err
 }
 
-func (c *Count) command(dst []byte, desc description.SelectedServer) ([]byte, error) {
-	switch {
-	case desc.WireVersion.Max < 12: // If wire version < 12 (4.9.0), use count command
-		dst = bsoncore.AppendStringElement(dst, "count", c.collection)
-		if c.query != nil {
-			dst = bsoncore.AppendDocumentElement(dst, "query", c.query)
-		}
-	default: // If wire version >= 12 (4.9.0), use aggregate with $collStats
-		dst = bsoncore.AppendStringElement(dst, "aggregate", c.collection)
-		var idx int32
-		idx, dst = bsoncore.AppendDocumentElementStart(dst, "cursor")
-		dst, _ = bsoncore.AppendDocumentEnd(dst, idx)
-		if c.query != nil {
-			return nil, fmt.Errorf("'query' cannot be set on Count against servers at or above 4.9.0")
-		}
-
-		collStatsStage := bsoncore.NewDocumentBuilder().
-			AppendDocument("$collStats", bsoncore.NewDocumentBuilder().
-				AppendDocument("count", bsoncore.NewDocumentBuilder().Build()).
-				Build()).
-			Build()
-		groupStage := bsoncore.NewDocumentBuilder().
-			AppendDocument("$group", bsoncore.NewDocumentBuilder().
-				AppendInt64("_id", 1).
-				AppendDocument("n", bsoncore.NewDocumentBuilder().
-					AppendString("$sum", "$count").Build()).
-				Build()).
-			Build()
-		countPipeline := bsoncore.NewArrayBuilder().
-			AppendDocument(collStatsStage).
-			AppendDocument(groupStage).
-			Build()
-		dst = bsoncore.AppendArrayElement(dst, "pipeline", countPipeline)
+func (c *Count) command(dst []byte, _ description.SelectedServer) ([]byte, error) {
+	dst = bsoncore.AppendStringElement(dst, "count", c.collection)
+	if c.query != nil {
+		dst = bsoncore.AppendDocumentElement(dst, "query", c.query)
 	}
-
-	if c.maxTimeMS != nil {
-		dst = bsoncore.AppendInt64Element(dst, "maxTimeMS", *c.maxTimeMS)
+	if c.comment.Type != bsontype.Type(0) {
+		dst = bsoncore.AppendValueElement(dst, "comment", c.comment)
 	}
 	return dst, nil
 }
 
-// MaxTimeMS specifies the maximum amount of time to allow the query to run.
-func (c *Count) MaxTimeMS(maxTimeMS int64) *Count {
+// MaxTime specifies the maximum amount of time to allow the query to run on the server.
+func (c *Count) MaxTime(maxTime *time.Duration) *Count {
 	if c == nil {
 		c = new(Count)
 	}
 
-	c.maxTimeMS = &maxTimeMS
+	c.maxTime = maxTime
 	return c
 }
 
@@ -220,6 +200,16 @@ func (c *Count) Collection(collection string) *Count {
 	}
 
 	c.collection = collection
+	return c
+}
+
+// Comment sets a value to help trace an operation.
+func (c *Count) Comment(comment bsoncore.Value) *Count {
+	if c == nil {
+		c = new(Count)
+	}
+
+	c.comment = comment
 	return c
 }
 
@@ -273,7 +263,7 @@ func (c *Count) ReadConcern(readConcern *readconcern.ReadConcern) *Count {
 	return c
 }
 
-// ReadPreference set the read prefernce used with this operation.
+// ReadPreference set the read preference used with this operation.
 func (c *Count) ReadPreference(readPreference *readpref.ReadPref) *Count {
 	if c == nil {
 		c = new(Count)
@@ -311,5 +301,25 @@ func (c *Count) ServerAPI(serverAPI *driver.ServerAPIOptions) *Count {
 	}
 
 	c.serverAPI = serverAPI
+	return c
+}
+
+// Timeout sets the timeout for this operation.
+func (c *Count) Timeout(timeout *time.Duration) *Count {
+	if c == nil {
+		c = new(Count)
+	}
+
+	c.timeout = timeout
+	return c
+}
+
+// Authenticator sets the authenticator to use for this operation.
+func (c *Count) Authenticator(authenticator driver.Authenticator) *Count {
+	if c == nil {
+		c = new(Count)
+	}
+
+	c.authenticator = authenticator
 	return c
 }

@@ -36,7 +36,7 @@ export function postMessageToParent(data: ParentMessage): boolean {
  * Sends message to target iframe
  *
  * @param target iframe to send data
- * @param data that will be send to iframe
+ * @param data that will be sent to iframe
  * @returns request success of fail
  */
 export function postMessageToIframe(target: HTMLIFrameElement, data: ChildMessage): boolean {
@@ -60,4 +60,25 @@ export function parseMessage({ data }: MessageEvent): AllMessages {
   }
 
   return data as AllMessages;
+}
+
+/**
+ * Sends message to parent window with height of iframe
+ *
+ * @param dropdown provide dropdown element if present on screen
+ */
+export function updateIframeHeight(dropdown?: HTMLElement) {
+  let scrollHeight = 0;
+
+  // If dropdown is present on screen, we need to calculate size according to it size since it's positioned absolutely
+  if (dropdown) {
+    const { top } = dropdown.getBoundingClientRect();
+    // The size of shadow under the dropdown is 20px
+    scrollHeight = window.scrollY + Math.abs(top) + dropdown.scrollHeight + 20;
+  }
+
+  // The size of vertical padding on body is 12px
+  const bodyHeight = document.body.offsetHeight + 12;
+
+  postMessageToParent({ height: Math.max(scrollHeight, bodyHeight) });
 }

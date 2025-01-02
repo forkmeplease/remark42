@@ -54,11 +54,25 @@ func STARTTLS(enabled bool) Option {
 	}
 }
 
+// InsecureSkipVerify skips certificate verification
+func InsecureSkipVerify(enabled bool) Option {
+	return func(s *Sender) {
+		s.insecureSkipVerify = enabled
+	}
+}
+
 // Auth sets smtp username and password
 func Auth(smtpUserName, smtpPasswd string) Option {
 	return func(s *Sender) {
 		s.smtpUserName = smtpUserName
 		s.smtpPassword = smtpPasswd
+	}
+}
+
+// LoginAuth sets LOGIN auth method
+func LoginAuth() Option {
+	return func(s *Sender) {
+		s.authMethod = authMethodLogin
 	}
 }
 

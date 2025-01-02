@@ -10,8 +10,8 @@ _This is the recommended way to run Remark42_
 
 - copy provided [`docker-compose.yml`](https://github.com/umputun/remark42/blob/master/docker-compose.yml) and customize for your needs
 - make sure you **don't keep** `ADMIN_PASSWD=something...` for any non-development deployments
-- pull prepared images from the Docker Hub and start - `docker-compose pull && docker-compose up -d`
-- alternatively, compile from the sources - `docker-compose build && docker-compose up -d`
+- pull prepared images from the Docker Hub and start - `docker compose pull && docker compose up -d`
+- alternatively, compile from the sources - `docker compose build && docker compose up -d`
 
 ### Installation with Binary
 
@@ -29,10 +29,10 @@ Add config for Remark on a page of your site ([here](/docs/configuration/fronten
 
 ```html
 <script>
-  var remark_config = {
-    host: 'REMARK_URL',
-    site_id: 'YOUR_SITE_ID',
-  }
+	var remark_config = {
+		host: "REMARK_URL",
+		site_id: "YOUR_SITE_ID",
+	}
 </script>
 ```
 
@@ -40,10 +40,10 @@ For example:
 
 ```html
 <script>
-  var remark_config = {
-    host: 'https://demo.remark42.com',
-    site_id: 'remark',
-  }
+	var remark_config = {
+		host: "https://demo.remark42.com",
+		site_id: "remark",
+	}
 </script>
 ```
 
@@ -76,5 +76,5 @@ To verify if Remark42 has been properly installed, check a demo page at `${REMAR
 
 ### Build from the source
 
-* to build Docker container - `make docker`. This command will produce container `umputun/remark42`
-* to build a single binary for direct execution - `make OS=<linux|windows|darwin> ARCH=<amd64|386>`. This step will produce an executable `remark42` file with everything embedded
+- to build Docker container - `make docker`. This command will produce container `umputun/remark42`
+- to build a single binary for direct execution - `make OS=<linux|windows|darwin> ARCH=<amd64|386>`. This step will produce an executable `remark42` file with everything embedded

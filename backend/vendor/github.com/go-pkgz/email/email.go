@@ -26,18 +26,20 @@ import (
 
 // Sender implements email sender
 type Sender struct {
-	smtpClient     SMTPClient
-	logger         Logger
-	host           string // SMTP host
-	port           int    // SMTP port
-	contentType    string // Content type, optional. Will trigger MIME and Content-Type headers
-	tls            bool   // TLS auth
-	starttls       bool   // StartTLS
-	smtpUserName   string // username
-	smtpPassword   string // password
-	timeOut        time.Duration
-	contentCharset string
-	timeNow        func() time.Time
+	smtpClient         SMTPClient
+	logger             Logger
+	host               string     // SMTP host
+	port               int        // SMTP port
+	contentType        string     // Content type, optional. Will trigger MIME and Content-Type headers
+	tls                bool       // TLS auth
+	starttls           bool       // StartTLS
+	insecureSkipVerify bool       // Insecure Skip Verify
+	smtpUserName       string     // username
+	smtpPassword       string     // password
+	authMethod         authMethod // auth method
+	timeOut            time.Duration
+	contentCharset     string
+	timeNow            func() time.Time
 }
 
 // Params contains all user-defined parameters to send emails
@@ -46,6 +48,7 @@ type Params struct {
 	To              []string // From email field
 	Subject         string   // Email subject
 	UnsubscribeLink string   // POST, https://support.google.com/mail/answer/81126 -> "Use one-click unsubscribe"
+	InReplyTo       string   // Identifier for email group (category), used for email grouping
 	Attachments     []string // Attachments path
 	InlineImages    []string // InlineImages images path
 }
@@ -68,25 +71,27 @@ type SMTPClient interface {
 // NewSender creates email client with prepared smtp
 func NewSender(smtpHost string, options ...Option) *Sender {
 	res := Sender{
-		smtpClient:     nil,
-		logger:         nopLogger{},
-		host:           smtpHost,
-		port:           25,
-		contentType:    `text/plain`,
-		tls:            false,
-		smtpUserName:   "",
-		smtpPassword:   "",
-		contentCharset: "UTF-8",
-		timeOut:        time.Second * 30,
-		timeNow:        time.Now,
+		smtpClient:         nil,
+		logger:             nopLogger{},
+		host:               smtpHost,
+		port:               25,
+		contentType:        `text/plain`,
+		tls:                false,
+		insecureSkipVerify: false,
+		smtpUserName:       "",
+		smtpPassword:       "",
+		authMethod:         authMethodPlain,
+		contentCharset:     "UTF-8",
+		timeOut:            time.Second * 30,
+		timeNow:            time.Now,
 	}
 	for _, opt := range options {
 		opt(&res)
 	}
 
-	res.logger.Logf("[INFO] new email sender created with host: %s:%d, tls: %v, username: %q, timeout: %v, "+
+	res.logger.Logf("[INFO] new email sender created with host: %s:%d, tls: %v, insecureSkipVerify: %v, username: %q, timeout: %v, "+
 		"content type: %q, charset: %q", smtpHost,
-		res.port, res.tls, res.smtpUserName, res.timeOut, res.contentType, res.contentCharset)
+		res.port, res.tls, res.insecureSkipVerify, res.smtpUserName, res.timeOut, res.contentType, res.contentCharset)
 	return &res
 }
 
@@ -119,8 +124,7 @@ func (em *Sender) Send(text string, params Params) error {
 		return errors.New("no recipients")
 	}
 
-	if em.smtpUserName != "" && em.smtpPassword != "" {
-		auth := smtp.PlainAuth("", em.smtpUserName, em.smtpPassword, em.host)
+	if auth := em.auth(); auth != nil {
 		if err := client.Auth(auth); err != nil {
 			return fmt.Errorf("failed to auth to smtp %s:%d, %w", em.host, em.port, err)
 		}
@@ -162,20 +166,21 @@ func (em *Sender) Send(text string, params Params) error {
 }
 
 func (em *Sender) String() string {
-	return fmt.Sprintf("smtp://%s:%d, auth:%v, tls:%v, starttls:%v, timeout:%v, content-type:%q, charset:%q",
-		em.host, em.port, em.smtpUserName != "", em.tls, em.starttls, em.timeOut, em.contentType, em.contentCharset)
+	return fmt.Sprintf("smtp://%s:%d, auth:%v, tls:%v, starttls:%v, insecureSkipVerify:%v, timeout:%v, content-type:%q, charset:%q",
+		em.host, em.port, em.smtpUserName != "", em.tls, em.starttls, em.insecureSkipVerify, em.timeOut, em.contentType, em.contentCharset)
 }
 
 func (em *Sender) client() (c *smtp.Client, err error) {
 	srvAddress := fmt.Sprintf("%s:%d", em.host, em.port)
+	// #nosec G402
 	tlsConf := &tls.Config{
-		InsecureSkipVerify: false,
+		InsecureSkipVerify: em.insecureSkipVerify, // #nosec G402
 		ServerName:         em.host,
 		MinVersion:         tls.VersionTLS12,
 	}
 
 	if em.tls {
-		conn, e := tls.Dial("tcp", srvAddress, tlsConf)
+		conn, e := tls.DialWithDialer(&net.Dialer{Timeout: em.timeOut}, "tcp", srvAddress, tlsConf)
 		if e != nil {
 			return nil, fmt.Errorf("failed to dial smtp tls to %s: %w", srvAddress, e)
 		}
@@ -204,6 +209,19 @@ func (em *Sender) client() (c *smtp.Client, err error) {
 	return c, nil
 }
 
+// auth returns an smtp.Auth that implements SMTP authentication mechanism
+// depends on Sender settings.
+func (em *Sender) auth() smtp.Auth {
+	if em.smtpUserName == "" || em.smtpPassword == "" {
+		return nil // no auth
+	}
+
+	if em.authMethod == authMethodLogin {
+		return newLoginAuth(em.smtpUserName, em.smtpPassword, em.host)
+	}
+	return smtp.PlainAuth("", em.smtpUserName, em.smtpPassword, em.host)
+}
+
 func (em *Sender) buildMessage(text string, params Params) (message string, err error) {
 	addHeader := func(msg, h, v string) string {
 		msg += fmt.Sprintf("%s: %s\n", h, v)
@@ -216,6 +234,10 @@ func (em *Sender) buildMessage(text string, params Params) (message string, err 
 	if params.UnsubscribeLink != "" {
 		message = addHeader(message, "List-Unsubscribe-Post", "List-Unsubscribe=One-Click")
 		message = addHeader(message, "List-Unsubscribe", "<"+params.UnsubscribeLink+">")
+	}
+
+	if params.InReplyTo != "" {
+		message = addHeader(message, "In-reply-to", "<"+params.InReplyTo+">")
 	}
 
 	withAttachments := len(params.Attachments) > 0

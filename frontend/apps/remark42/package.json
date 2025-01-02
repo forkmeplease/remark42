@@ -3,8 +3,9 @@
   "version": "0.16.0",
   "license": "MIT",
   "scripts": {
-    "dev": "cross-env REMARK_URL=http://127.0.0.1:8080 webpack serve --mode development",
-    "start": "cross-env REMARK_API_BASE_URL=https://demo.remark42.com webpack serve --mode development",
+    "dev": "cross-env REMARK_URL=http://127.0.0.1:8080 pnpm dev:custom",
+    "dev:demo": "cross-env REMARK_API_BASE_URL=https://demo.remark42.com pnpm dev:custom",
+    "dev:custom": "webpack serve --mode development",
     "build": "webpack --mode production",
     "build:analyze": "webpack --mode production --analyze",
     "lint": "run-p lint:*",
@@ -21,9 +22,10 @@
     "translation:check": "node ./tasks/checkTranslation.js"
   },
   "engines": {
-    "node": ">=16.15 <=17.*",
-    "pnpm": "7.*"
+    "node": ">=16.15 <=22.*",
+    "pnpm": "8.*"
   },
+  "packageManager": "pnpm@8.15.9",
   "dependencies": {
     "@github/markdown-toolbar-element": "^2.1.1",
     "@github/text-expander-element": "^2.2.2",
@@ -58,6 +60,7 @@
     "@swc/jest": "^0.2.21",
     "@testing-library/jest-dom": "^5.16.4",
     "@testing-library/preact": "^3.2.2",
+    "@testing-library/preact-hooks": "^1.1.0",
     "@types/enzyme": "^3.10.12",
     "@types/eslint": "^8.4.5",
     "@types/jest": "^28.1.4",
@@ -73,7 +76,7 @@
     "babel-loader": "^8.2.5",
     "babel-plugin-jsx-remove-data-test-id": "^3.0.0",
     "clean-webpack-plugin": "^4.0.0",
-    "codecov": "^3.8.3",
+    "copy-webpack-plugin": "^12.0.2",
     "cross-env": "^7.0.3",
     "css-loader": "^6.7.1",
     "css-minimizer-webpack-plugin": "^4.0.0",

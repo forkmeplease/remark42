@@ -37,6 +37,20 @@ linters:
     - wrapcheck
     - stylecheck
     - thelper
+    - nonamedreturns
+    - revive
+    - dupword
+    - exhaustruct
+    - varnamelen
+    - forcetypeassert
+    - ireturn
+    - maintidx
+    - govet
+    - nosnakecase
+    - testableexamples
+    - musttag
+    - depguard
+    - goconst
 
 linters-settings:
   govet:

@@ -14,7 +14,7 @@ This documentation describes how to enable the email-related capabilities of Rem
 
 - email notifications for any users except anonymous:
 
-  GitHub or Google or Twitter or any other kind of user gets the ability to get email notifications about new replies to their comments (and any of the responses down the tree):
+  GitHub or Google or any other kind of user gets the ability to get email notifications about new replies to their comments (and any of the responses down the tree):
 
   ![Email notifications subscription](images/email_notifications.png)
 
@@ -26,6 +26,7 @@ To enable any email functionality, you need to set up an email (SMTP) server con
 SMTP_HOST
 SMTP_PORT
 SMTP_TLS
+SMTP_INSECURE_SKIP_VERIFY
 SMTP_STARTTLS
 SMTP_USERNAME
 SMTP_PASSWORD
@@ -200,16 +201,16 @@ Now we have the following templates:
 - `email_unsubscribe.html.tmpl` – used for notification about successful unsubscribing from replies
 - `error_response.html.tmpl` – used for HTML errors
 
-To replace any template, add the file with the same name to the directory with the remark42 executable file. In case you run Remark42 inside docker-compose, you can put customised templates into a directory like `customised_templates` and then mount it like that:
+To replace any template, add the file with the same name to the directory with the remark42 executable file. In case you run Remark42 inside Docker Compose, you can put customised templates into a directory like `customised_templates` and then mount it like that:
 
 ```yaml
-    volumes:
-      - ./var:/srv/var
-      - ./customised_templates/email_confirmation_login.html.tmpl:/srv/email_confirmation_login.html.tmpl:ro
-      - ./customised_templates/email_confirmation_subscription.html.tmpl:/srv/email_confirmation_subscription.html.tmpl:ro
-      - ./customised_templates/email_reply.html.tmpl:/srv/email_reply.html.tmpl:ro
-      - ./customised_templates/email_unsubscribe.html.tmpl:/srv/email_unsubscribe.html.tmpl:ro
-      - ./customised_templates/error_response.html.tmpl:/srv/error_response.html.tmpl:ro
+volumes:
+  - ./var:/srv/var
+  - ./customised_templates/email_confirmation_login.html.tmpl:/srv/email_confirmation_login.html.tmpl:ro
+  - ./customised_templates/email_confirmation_subscription.html.tmpl:/srv/email_confirmation_subscription.html.tmpl:ro
+  - ./customised_templates/email_reply.html.tmpl:/srv/email_reply.html.tmpl:ro
+  - ./customised_templates/email_unsubscribe.html.tmpl:/srv/email_unsubscribe.html.tmpl:ro
+  - ./customised_templates/error_response.html.tmpl:/srv/error_response.html.tmpl:ro
 ```
 
 The easiest way to test it is to mount `error_response.html.tmpl`, and then head to <http://127.0.0.1:8080/email/unsubscribe.html>, where you are supposed to see the page like the following:

@@ -17,6 +17,7 @@ export interface User {
 }
 
 export type OAuthProvider =
+	| 'apple'
 	| 'facebook'
 	| 'twitter'
 	| 'google'
@@ -24,6 +25,7 @@ export type OAuthProvider =
 	| 'github'
 	| 'microsoft'
 	| 'patreon'
+	| 'discord'
 	| 'telegram'
 	| 'dev'
 export type FormProvider = 'email' | 'anonymous'

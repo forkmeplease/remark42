@@ -23,10 +23,17 @@ type ChangeStreamOptions struct {
 	// default value is nil, which means the default collation of the collection will be used.
 	Collation *Collation
 
-	// Specifies whether the updated document should be returned in change notifications for update operations along
-	// with the deltas describing the changes made to the document. The default is options.Default, which means that
-	// the updated document will not be included in the change notification.
+	// A string that will be included in server logs, profiling logs, and currentOp queries to help trace the operation.
+	// The default is nil, which means that no comment will be included in the logs.
+	Comment *string
+
+	// Specifies how the updated document should be returned in change notifications for update operations. The default
+	// is options.Default, which means that only partial update deltas will be included in the change notification.
 	FullDocument *FullDocument
+
+	// Specifies how the pre-update document should be returned in change notifications for update operations. The default
+	// is options.Off, which means that the pre-update document will not be included in the change notification.
+	FullDocumentBeforeChange *FullDocument
 
 	// The maximum amount of time that the server should wait for new documents to satisfy a tailable cursor query.
 	MaxAwaitTime *time.Duration
@@ -35,6 +42,11 @@ type ChangeStreamOptions struct {
 	// entry immediately after the resume token will be returned. If this is specified, StartAtOperationTime and
 	// StartAfter must not be set.
 	ResumeAfter interface{}
+
+	// ShowExpandedEvents specifies whether the server will return an expanded list of change stream events. Additional
+	// events include: createIndexes, dropIndexes, modify, create, shardCollection, reshardCollection and
+	// refineCollectionShardKey. This option is only valid for MongoDB versions >= 6.0.
+	ShowExpandedEvents *bool
 
 	// If specified, the change stream will only return changes that occurred at or after the given timestamp. This
 	// option is only valid for MongoDB versions >= 4.0. If this is specified, ResumeAfter and StartAfter must not be
@@ -62,7 +74,6 @@ type ChangeStreamOptions struct {
 // ChangeStream creates a new ChangeStreamOptions instance.
 func ChangeStream() *ChangeStreamOptions {
 	cso := &ChangeStreamOptions{}
-	cso.SetFullDocument(Default)
 	return cso
 }
 
@@ -78,9 +89,21 @@ func (cso *ChangeStreamOptions) SetCollation(c Collation) *ChangeStreamOptions {
 	return cso
 }
 
+// SetComment sets the value for the Comment field.
+func (cso *ChangeStreamOptions) SetComment(comment string) *ChangeStreamOptions {
+	cso.Comment = &comment
+	return cso
+}
+
 // SetFullDocument sets the value for the FullDocument field.
 func (cso *ChangeStreamOptions) SetFullDocument(fd FullDocument) *ChangeStreamOptions {
 	cso.FullDocument = &fd
+	return cso
+}
+
+// SetFullDocumentBeforeChange sets the value for the FullDocumentBeforeChange field.
+func (cso *ChangeStreamOptions) SetFullDocumentBeforeChange(fdbc FullDocument) *ChangeStreamOptions {
+	cso.FullDocumentBeforeChange = &fdbc
 	return cso
 }
 
@@ -93,6 +116,12 @@ func (cso *ChangeStreamOptions) SetMaxAwaitTime(d time.Duration) *ChangeStreamOp
 // SetResumeAfter sets the value for the ResumeAfter field.
 func (cso *ChangeStreamOptions) SetResumeAfter(rt interface{}) *ChangeStreamOptions {
 	cso.ResumeAfter = rt
+	return cso
+}
+
+// SetShowExpandedEvents sets the value for the ShowExpandedEvents field.
+func (cso *ChangeStreamOptions) SetShowExpandedEvents(see bool) *ChangeStreamOptions {
+	cso.ShowExpandedEvents = &see
 	return cso
 }
 
@@ -127,6 +156,9 @@ func (cso *ChangeStreamOptions) SetCustomPipeline(cp bson.M) *ChangeStreamOption
 
 // MergeChangeStreamOptions combines the given ChangeStreamOptions instances into a single ChangeStreamOptions in a
 // last-one-wins fashion.
+//
+// Deprecated: Merging options structs will not be supported in Go Driver 2.0. Users should create a
+// single options struct instead.
 func MergeChangeStreamOptions(opts ...*ChangeStreamOptions) *ChangeStreamOptions {
 	csOpts := ChangeStream()
 	for _, cso := range opts {
@@ -139,14 +171,23 @@ func MergeChangeStreamOptions(opts ...*ChangeStreamOptions) *ChangeStreamOptions
 		if cso.Collation != nil {
 			csOpts.Collation = cso.Collation
 		}
+		if cso.Comment != nil {
+			csOpts.Comment = cso.Comment
+		}
 		if cso.FullDocument != nil {
 			csOpts.FullDocument = cso.FullDocument
+		}
+		if cso.FullDocumentBeforeChange != nil {
+			csOpts.FullDocumentBeforeChange = cso.FullDocumentBeforeChange
 		}
 		if cso.MaxAwaitTime != nil {
 			csOpts.MaxAwaitTime = cso.MaxAwaitTime
 		}
 		if cso.ResumeAfter != nil {
 			csOpts.ResumeAfter = cso.ResumeAfter
+		}
+		if cso.ShowExpandedEvents != nil {
+			csOpts.ShowExpandedEvents = cso.ShowExpandedEvents
 		}
 		if cso.StartAtOperationTime != nil {
 			csOpts.StartAtOperationTime = cso.StartAtOperationTime

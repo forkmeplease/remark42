@@ -13,29 +13,32 @@ title: Frontend Configuration
   - `'embed'` – basic comments widget
   - `'last-comments'` – last comments widget, see [Last Comments](#last-comments-widget) section below
   - `'counter'` – counter widget, see [Counter](#counter-widget) section below
-- **`max_shown_comments`**`: number` (optional, `15` by default) – maximum number of comments that is renered on mobile version
+- **`max_shown_comments`**`: number` (optional, `15` by default) – maximum number of comments that is rendered on mobile version
+- **`max_last_comments`**`: number` (optional, `15` by default) – maximum number of comments in the last comments widget
 - **`theme`**`: 'light' | 'dark'` (optional, `'light'` by default) – changes UI theme
 - **`page_title`**`: string` (optional, `document.title` by default) – title for current comments page
 - **`locale`**`: enum` (optional, `'en'` by default) – interface localization, [check possible localizations](#locales)
 - **`show_email_subscription`**`: boolean` (optional, `true` by default) – enables email subscription feature in interface when enable it from backend side, if you set this param in `false` you will get notifications email notifications as admin but your users won't have interface for subscription
 - **`show_rss_subscription`**`: boolean` (optional, `true` by default) – enables RSS subscription feature in interface
 - **`simple_view`**`: boolean` (optional, `false` by default) – overrides the parameter from the backend minimized UI with basic info only
+- **`no_footer`**`: boolean` (optional, `false` by default) – hides footer with signature and links to Remark42
 
 Example with all of the params:
 
 ```html
 <script>
-  var remark_config = {
-    host: 'https://remark42.example.com',
-    site_id: 'my_site',
-    components: ['embeded', 'last-comments']
-    max_shown_comments: 100,
-    theme: 'dark',
-    page_title: 'My custom title for a page',
-    locale: 'es',
-    show_email_subscription: false,
-    simple_view: true
-  }
+	var remark_config = {
+		host: 'https://remark42.example.com',
+		site_id: 'my_site',
+		components: ['embed', 'last-comments'],
+		max_shown_comments: 100,
+		theme: 'dark',
+		page_title: 'My custom title for a page',
+		locale: 'es',
+		show_email_subscription: false,
+		simple_view: true,
+		no_footer: false
+	}
 </script>
 ```
 
@@ -89,11 +92,11 @@ Add this snippet to the bottom of web page, or adjust already present `remark_co
 
 ```html
 <script>
-  var remark_config = {
-    host: "REMARK_URL",
-    site_id: "YOUR_SITE_ID",
-    components: ["last-comments"],
-  }
+	var remark_config = {
+		host: "REMARK_URL",
+		site_id: "YOUR_SITE_ID",
+		components: ["last-comments"],
+	}
 </script>
 ```
 
@@ -116,11 +119,11 @@ Add this snippet to the bottom of web page, or adjust already present `remark_co
 
 ```html
 <script>
-  var remark_config = {
-    host: "REMARK_URL",
-    site_id: "YOUR_SITE_ID",
-    components: ["counter"],
-  }
+	var remark_config = {
+		host: "REMARK_URL",
+		site_id: "YOUR_SITE_ID",
+		components: ["counter"],
+	}
 </script>
 ```
 
@@ -132,8 +135,8 @@ And then add a node like this in the place where you want to see a number of com
 
 ```html
 <span
-  class="remark42__counter"
-  data-url="https://domain.com/path/to/article/"
+	class="remark42__counter"
+	data-url="https://domain.com/path/to/article/"
 ></span>
 ```
 

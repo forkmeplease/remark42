@@ -27,7 +27,7 @@ export const messages = defineMessages<string>({
   },
   token: {
     id: 'token',
-    defaultMessage: 'Token',
+    defaultMessage: 'Copy and paste the token from the email',
   },
   expiredToken: {
     id: 'token.expired',
@@ -56,34 +56,6 @@ export const messages = defineMessages<string>({
   submit: {
     id: 'auth.submit',
     defaultMessage: 'Submit',
-  },
-  telegramLink: {
-    id: 'auth.telegram-link',
-    defaultMessage: 'by the link',
-  },
-  telegramCheck: {
-    id: 'auth.telegram-check',
-    defaultMessage: 'Check',
-  },
-  telegramQR: {
-    id: 'auth.telegram-qr',
-    defaultMessage: 'Telegram QR-code',
-  },
-  telegramMessage1: {
-    id: 'auth.telegram-message-1',
-    defaultMessage: 'Open Telegram',
-  },
-  telegramOptionalQR: {
-    id: 'auth.telegram-optional-qr',
-    defaultMessage: 'or by scanning the QR code',
-  },
-  telegramMessage2: {
-    id: 'auth.telegram-message-2',
-    defaultMessage: 'and click “Start” there.',
-  },
-  telegramMessage3: {
-    id: 'auth.telegram-message-3',
-    defaultMessage: 'Afterwards, click “Check” below.',
   },
   openProfile: {
     id: 'auth.open-profile',

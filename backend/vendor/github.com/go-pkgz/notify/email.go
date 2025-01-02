@@ -17,8 +17,10 @@ type SMTPParams struct {
 	Port        int           // SMTP port
 	TLS         bool          // TLS auth
 	StartTLS    bool          // StartTLS auth
+	InsecureSkipVerify bool	  // skip certificate verification
 	ContentType string        // Content type
 	Charset     string        // Character set
+	LoginAuth   bool          // LOGIN auth method instead of default PLAIN, needed for Office 365 and outlook.com
 	Username    string        // username
 	Password    string        // password
 	TimeOut     time.Duration // TCP connection timeout
@@ -46,6 +48,10 @@ func NewEmail(smtpParams SMTPParams) *Email {
 		opts = append(opts, email.Charset(smtpParams.Charset))
 	}
 
+	if smtpParams.LoginAuth {
+		opts = append(opts, email.LoginAuth())
+	}
+
 	if smtpParams.Port != 0 {
 		opts = append(opts, email.Port(smtpParams.Port))
 	}
@@ -60,6 +66,10 @@ func NewEmail(smtpParams SMTPParams) *Email {
 
 	if smtpParams.StartTLS {
 		opts = append(opts, email.STARTTLS(true))
+	}
+
+	if smtpParams.InsecureSkipVerify {
+		opts = append(opts, email.InsecureSkipVerify(true))
 	}
 
 	sender := email.NewSender(smtpParams.Host, opts...)

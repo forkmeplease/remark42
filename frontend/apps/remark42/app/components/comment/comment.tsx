@@ -62,7 +62,6 @@ export interface State {
 }
 
 export class Comment extends Component<CommentProps, State> {
-  votingPromise: Promise<unknown> = Promise.resolve();
   /** comment text node. Used in comment text copying */
   textNode = createRef<HTMLDivElement>();
 
@@ -88,7 +87,7 @@ export class Comment extends Component<CommentProps, State> {
   };
 
   /**
-   * Defines whether comment made by logged in user
+   * Defines whether comment made by logged-in user
    */
   isCurrentUser = (): boolean => {
     return !this.isGuest() && this.props.data.user.id === this.props.user?.id;
@@ -172,16 +171,6 @@ export class Comment extends Component<CommentProps, State> {
 
     if (window.confirm(promptMessage)) {
       this.props.setVerifiedStatus!(userId, value);
-    }
-  };
-
-  onBlockUserClick = (evt: Event) => {
-    const target = evt.currentTarget;
-
-    if (target instanceof HTMLOptionElement) {
-      // we have to debounce the blockUser function calls otherwise it will be
-      // called 2 times (by change event and by blur event)
-      this.blockUser(target.value as BlockTTL);
     }
   };
 
@@ -347,7 +336,7 @@ export class Comment extends Component<CommentProps, State> {
     if (props.view === 'preview') {
       return (
         <article className={b('comment', { mix: props.mix }, defaultMods)}>
-          <div className="comment__body">
+          <div className="comment__body" dir="auto">
             {!!o.title && (
               <div className="comment__title">
                 <a className="comment__title-link" href={`${o.locator.url}#${COMMENT_NODE_CLASSNAME_PREFIX}${o.id}`}>
@@ -365,7 +354,7 @@ export class Comment extends Component<CommentProps, State> {
               )}
             </div>{' '}
             <div
-              className={b('comment__text', { mix: b('raw-content', {}, { theme: props.theme }) })}
+              className="comment__text raw-content"
               // eslint-disable-next-line react/no-danger
               dangerouslySetInnerHTML={{ __html: o.text }}
             />
@@ -427,7 +416,7 @@ export class Comment extends Component<CommentProps, State> {
                 />
               </button>
             )}
-            {!isAdmin && !!o.user.verified && props.view !== 'user' && (
+            {!isAdmin && o.user.verified && props.view !== 'user' && (
               <VerificationIcon className={styles.verificationIcon} title={intl.formatMessage(messages.verifiedUser)} />
             )}
             {o.user.paid_sub && (
@@ -484,10 +473,11 @@ export class Comment extends Component<CommentProps, State> {
         <div className="comment__body">
           {(!props.collapsed || props.view === 'pinned') && (
             <div
-              className={b('comment__text', { mix: b('raw-content', {}, { theme: props.theme }) })}
+              className="comment__text raw-content"
               ref={this.textNode}
               // eslint-disable-next-line react/no-danger
               dangerouslySetInnerHTML={{ __html: o.text }}
+              dir="auto"
             />
           )}
 
@@ -560,7 +550,7 @@ function getTextSnippet(html: string) {
   tmp.innerHTML = html.replace('</p><p>', ' ');
 
   const result = tmp.innerText || '';
-  const snippet = result.substr(0, LENGTH);
+  const snippet = result.substring(0, LENGTH);
 
   return snippet.length === LENGTH && result.length !== LENGTH ? `${snippet}...` : snippet;
 }

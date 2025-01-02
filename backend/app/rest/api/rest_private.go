@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/sha1" //nolint:gosec //not used for security
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -15,12 +16,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
-	"github.com/go-pkgz/auth"
-	"github.com/go-pkgz/auth/token"
-	cache "github.com/go-pkgz/lcw"
+	"github.com/go-pkgz/auth/v2"
+	"github.com/go-pkgz/auth/v2/token"
+	cache "github.com/go-pkgz/lcw/v2"
 	log "github.com/go-pkgz/lgr"
 	R "github.com/go-pkgz/rest"
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/hashicorp/go-multierror"
 
 	"github.com/umputun/remark42/backend/app/notify"
@@ -33,16 +34,17 @@ import (
 )
 
 type private struct {
-	dataService      privStore
-	cache            LoadingCache
-	readOnlyAge      int
-	commentFormatter *store.CommentFormatter
-	imageService     *image.Service
-	notifyService    *notify.Service
-	authenticator    *auth.Service
-	telegramService  telegramService
-	remarkURL        string
-	anonVote         bool
+	dataService                privStore
+	cache                      LoadingCache
+	readOnlyAge                int
+	commentFormatter           *store.CommentFormatter
+	imageService               *image.Service
+	notifyService              *notify.Service
+	authenticator              *auth.Service
+	telegramService            telegramService
+	remarkURL                  string
+	anonVote                   bool
+	disableFancyTextFormatting bool // disables SmartyPants in the comment text rendering of the posted comments
 }
 
 // telegramService is a subset of Telegram service used for setting up user telegram notifications
@@ -58,15 +60,15 @@ type privStore interface {
 	Vote(req service.VoteReq) (comment store.Comment, err error)
 	Get(locator store.Locator, commentID string, user store.User) (store.Comment, error)
 	User(siteID, userID string, limit, skip int, user store.User) ([]store.Comment, error)
-	GetUserEmail(siteID string, userID string) (string, error)
-	SetUserEmail(siteID string, userID string, value string) (string, error)
-	GetUserTelegram(siteID string, userID string) (string, error)
-	SetUserTelegram(siteID string, userID string, value string) (string, error)
-	DeleteUserDetail(siteID string, userID string, detail engine.UserDetail) error
+	GetUserEmail(siteID, userID string) (string, error)
+	SetUserEmail(siteID, userID, value string) (string, error)
+	GetUserTelegram(siteID, userID string) (string, error)
+	SetUserTelegram(siteID, userID, value string) (string, error)
+	DeleteUserDetail(siteID, userID string, detail engine.UserDetail) error
 	ValidateComment(c *store.Comment) error
-	IsVerified(siteID string, userID string) bool
+	IsVerified(siteID, userID string) bool
 	IsReadOnly(locator store.Locator) bool
-	IsBlocked(siteID string, userID string) bool
+	IsBlocked(siteID, userID string) bool
 	Info(locator store.Locator, readonlyAge int) (store.PostInfo, error)
 }
 
@@ -87,14 +89,14 @@ func (s *private) previewCommentCtrl(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	comment = s.commentFormatter.Format(comment)
+	comment = s.commentFormatter.Format(comment, s.disableFancyTextFormatting)
 	comment.Sanitize()
 
-	// check if images are valid
-	for _, id := range s.imageService.ExtractPictures(comment.Text) {
+	// check if images are valid, omit proxied images as they are lazy-loaded
+	for _, id := range s.imageService.ExtractNonProxiedPictures(comment.Text) {
 		err := s.imageService.ResetCleanupTimer(id)
 		if err != nil {
-			rest.SendErrorJSON(w, r, http.StatusBadRequest, err, "can't renew staged picture cleanup timer", rest.ErrImgNotFound)
+			rest.SendErrorJSON(w, r, http.StatusBadRequest, err, "can't load picture from the comment", rest.ErrImgNotFound)
 			return
 		}
 	}
@@ -127,10 +129,10 @@ func (s *private) createCommentCtrl(w http.ResponseWriter, r *http.Request) {
 		rest.SendErrorJSON(w, r, http.StatusBadRequest, err, "invalid comment", rest.ErrCommentValidation)
 		return
 	}
-	comment = s.commentFormatter.Format(comment)
+	comment = s.commentFormatter.Format(comment, s.disableFancyTextFormatting)
 
-	// check if images are valid
-	for _, id := range s.imageService.ExtractPictures(comment.Text) {
+	// check if images are valid, omit proxied images as they are lazy-loaded
+	for _, id := range s.imageService.ExtractNonProxiedPictures(comment.Text) {
 		_, err := s.imageService.Load(id)
 		if err != nil {
 			rest.SendErrorJSON(w, r, http.StatusBadRequest, err, "can't load picture from the comment", rest.ErrImgNotFound)
@@ -150,7 +152,7 @@ func (s *private) createCommentCtrl(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id, err := s.dataService.Create(comment)
-	if err == service.ErrRestrictedWordsFound {
+	if errors.Is(err, service.ErrRestrictedWordsFound) {
 		rest.SendErrorJSON(w, r, http.StatusBadRequest, err, "invalid comment", rest.ErrCommentRestrictWords)
 		return
 	}
@@ -187,7 +189,7 @@ func (s *private) updateCommentCtrl(w http.ResponseWriter, r *http.Request) {
 	}{}
 
 	if err := render.DecodeJSON(http.MaxBytesReader(w, r.Body, hardBodyLimit), &edit); err != nil {
-		rest.SendErrorJSON(w, r, http.StatusBadRequest, err, "can't bind comment", rest.ErrDecode)
+		rest.SendErrorJSON(w, r, http.StatusBadRequest, err, "can't read comment details from body", rest.ErrDecode)
 		return
 	}
 
@@ -211,7 +213,7 @@ func (s *private) updateCommentCtrl(w http.ResponseWriter, r *http.Request) {
 	}
 
 	editReq := service.EditRequest{
-		Text:    s.commentFormatter.FormatText(edit.Text),
+		Text:    s.commentFormatter.FormatText(edit.Text, s.disableFancyTextFormatting),
 		Orig:    edit.Text,
 		Summary: edit.Summary,
 		Delete:  edit.Delete,
@@ -219,7 +221,7 @@ func (s *private) updateCommentCtrl(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res, err := s.dataService.EditComment(locator, id, editReq)
-	if err == service.ErrRestrictedWordsFound {
+	if errors.Is(err, service.ErrRestrictedWordsFound) {
 		rest.SendErrorJSON(w, r, http.StatusBadRequest, err, "invalid comment", rest.ErrCommentValidation)
 		return
 	}
@@ -244,7 +246,7 @@ func (s *private) userInfoCtrl(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("[WARN] can't read email for %s, %v", user.ID, err)
 		}
-		if len(email) > 0 {
+		if email != "" {
 			user.EmailSubscription = true
 		}
 	}
@@ -307,32 +309,63 @@ func (s *private) getEmailCtrl(w http.ResponseWriter, r *http.Request) {
 }
 
 // sendEmailConfirmationCtrl gets address and siteID from query, makes confirmation token and sends it to user.
-// GET /email/subscribe?site=siteID&address=someone@example.com
+// In case user is logged in with the same email, and auto_confirm is true, confirm it right away.
+// In case of quick confirmation, "updated" is set to true, otherwise - to false.
+// POST /email/subscribe with site and address in json body
+//
 //nolint:dupl // too hard to deduplicate that logic, as then it's tricky to use SendErrorJSON
 func (s *private) sendEmailConfirmationCtrl(w http.ResponseWriter, r *http.Request) {
 	user := rest.MustGetUserInfo(r)
-	address := r.URL.Query().Get("address")
-	siteID := r.URL.Query().Get("site")
-	if address == "" {
+
+	subscribe := struct {
+		Site        string
+		Address     string
+		autoConfirm bool
+	}{autoConfirm: true}
+	if err := render.DecodeJSON(http.MaxBytesReader(w, r.Body, hardBodyLimit), &subscribe); err != nil {
+		if err != io.EOF {
+			rest.SendErrorJSON(w, r, http.StatusBadRequest, err, "can't parse request body", rest.ErrDecode)
+			return
+		}
+		// old behavior fallback, reading from the query params. Auto confirm is false in this case.
+		subscribe.Address = r.URL.Query().Get("address")
+		subscribe.Site = r.URL.Query().Get("site")
+		subscribe.autoConfirm = false
+	}
+
+	if subscribe.Address == "" {
 		rest.SendErrorJSON(w, r, http.StatusBadRequest,
 			fmt.Errorf("missing parameter"), "address parameter is required", rest.ErrInternal)
 		return
 	}
-	existingAddress, err := s.dataService.GetUserEmail(siteID, user.ID)
-	if err != nil {
-		log.Printf("[WARN] can't read email for %s, %v", user.ID, err)
+	existingAddress, getErr := s.dataService.GetUserEmail(subscribe.Site, user.ID)
+	if getErr != nil {
+		log.Printf("[WARN] can't read email for %s, %v", user.ID, getErr)
 	}
-	if address == existingAddress {
+	if subscribe.Address == existingAddress {
 		rest.SendErrorJSON(w, r, http.StatusConflict,
 			fmt.Errorf("already verified"), "email address is already verified for this user", rest.ErrInternal)
 		return
 	}
+
+	// in case the user logged in with the same email as they try to subscribe with, confirm it right away
+	// this behavior is different from the previous one and is hidden behind the autoConfirm flag,
+	// which is true for the new API, and false for the old one
+	//
+	// nolint:gosec // this is not used for security purposes
+	if subscribe.autoConfirm &&
+		strings.HasPrefix(user.ID, "email_") &&
+		strings.TrimPrefix(user.ID, "email_") == token.HashID(sha1.New(), subscribe.Address) {
+		s.setEmail(w, r, user.ID, subscribe.Site, subscribe.Address)
+		return
+	}
+
 	claims := token.Claims{
-		Handshake: &token.Handshake{ID: user.ID + "::" + address},
-		StandardClaims: jwt.StandardClaims{
-			Audience:  r.URL.Query().Get("site"),
-			ExpiresAt: time.Now().Add(30 * time.Minute).Unix(),
-			NotBefore: time.Now().Add(-1 * time.Minute).Unix(),
+		Handshake: &token.Handshake{ID: user.ID + "::" + subscribe.Address},
+		RegisteredClaims: jwt.RegisteredClaims{
+			Audience:  jwt.ClaimStrings{r.URL.Query().Get("site")},
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(30 * time.Minute)),
+			NotBefore: jwt.NewNumericDate(time.Now().Add(-1 * time.Minute)),
 			Issuer:    "remark42",
 		},
 	}
@@ -345,14 +378,14 @@ func (s *private) sendEmailConfirmationCtrl(w http.ResponseWriter, r *http.Reque
 
 	s.notifyService.SubmitVerification(
 		notify.VerificationRequest{
-			SiteID: siteID,
+			SiteID: subscribe.Site,
 			User:   user.Name,
-			Email:  address,
+			Email:  subscribe.Address,
 			Token:  tkn,
 		},
 	)
 
-	render.JSON(w, r, R.JSON{"user": user, "address": address})
+	render.JSON(w, r, R.JSON{"user": user, "address": subscribe.Address, "updated": false})
 }
 
 // telegramSubscribeCtrl generates and verifies telegram notification request
@@ -399,7 +432,7 @@ func (s *private) telegramSubscribeCtrl(w http.ResponseWriter, r *http.Request) 
 	var address, siteID string
 	address, siteID, err := s.telegramService.CheckToken(queryToken, user.ID)
 	if err != nil {
-		rest.SendErrorJSON(w, r, http.StatusInternalServerError, err, "can't set telegram for user", rest.ErrInternal)
+		rest.SendErrorJSON(w, r, http.StatusNotFound, err, "request is not verified yet", rest.ErrInternal)
 		return
 	}
 
@@ -416,17 +449,29 @@ func (s *private) telegramSubscribeCtrl(w http.ResponseWriter, r *http.Request) 
 }
 
 // setConfirmedEmailCtrl uses provided token parameter (generated by sendEmailConfirmationCtrl) to set email and add it to user token
-// PUT /email/confirm?site=siteID&tkn=jwt
+// POST /email/confirm with site and token in json body
 func (s *private) setConfirmedEmailCtrl(w http.ResponseWriter, r *http.Request) {
-	tkn := r.URL.Query().Get("tkn")
-	if tkn == "" {
+	user := rest.MustGetUserInfo(r)
+
+	confirm := struct {
+		Site  string
+		Token string
+	}{}
+	if err := render.DecodeJSON(http.MaxBytesReader(w, r.Body, hardBodyLimit), &confirm); err != nil {
+		if err != io.EOF {
+			rest.SendErrorJSON(w, r, http.StatusBadRequest, err, "can't parse request body", rest.ErrDecode)
+			return
+		}
+		// old behavior fallback, reading from the query params
+		confirm.Token = r.URL.Query().Get("tkn")
+		confirm.Site = r.URL.Query().Get("site")
+	}
+
+	if confirm.Token == "" {
 		rest.SendErrorJSON(w, r, http.StatusBadRequest, fmt.Errorf("missing parameter"), "token parameter is required", rest.ErrInternal)
 		return
 	}
-	user := rest.MustGetUserInfo(r)
-	siteID := r.URL.Query().Get("site")
-
-	confClaims, err := s.authenticator.TokenService().Parse(tkn)
+	confClaims, err := s.authenticator.TokenService().Parse(confirm.Token)
 	if err != nil {
 		rest.SendErrorJSON(w, r, http.StatusForbidden, err, "failed to verify confirmation token", rest.ErrInternal)
 		return
@@ -444,17 +489,20 @@ func (s *private) setConfirmedEmailCtrl(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	address := elems[1]
+	s.setEmail(w, r, user.ID, confirm.Site, address)
+}
 
-	log.Printf("[DEBUG] set email for user %s", user.ID)
+func (s *private) setEmail(w http.ResponseWriter, r *http.Request, userID, siteID, address string) {
+	log.Printf("[DEBUG] set email for user %s", userID)
 
-	val, err := s.dataService.SetUserEmail(siteID, user.ID, address)
+	val, err := s.dataService.SetUserEmail(siteID, userID, address)
 	if err != nil {
 		code := parseError(err, rest.ErrInternal)
 		rest.SendErrorJSON(w, r, http.StatusBadRequest, err, "can't set email for user", code)
 		return
 	}
 
-	// update User.Email from the token
+	// update User.Email field
 	claims, _, err := s.authenticator.TokenService().Get(r)
 	if err != nil {
 		rest.SendErrorJSON(w, r, http.StatusForbidden, err, "failed to verify confirmation token", rest.ErrInternal)
@@ -656,11 +704,11 @@ func (s *private) deleteMeCtrl(w http.ResponseWriter, r *http.Request) {
 	siteID := r.URL.Query().Get("site")
 
 	claims := token.Claims{
-		StandardClaims: jwt.StandardClaims{
-			Audience:  siteID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Audience:  jwt.ClaimStrings{siteID},
 			Issuer:    "remark42",
-			ExpiresAt: time.Now().AddDate(0, 3, 0).Unix(),
-			NotBefore: time.Now().Add(-1 * time.Minute).Unix(),
+			ExpiresAt: jwt.NewNumericDate(time.Now().AddDate(0, 3, 0)),
+			NotBefore: jwt.NewNumericDate(time.Now().Add(-1 * time.Minute)),
 		},
 		User: &token.User{
 			ID:   user.ID,

@@ -1,5 +1,5 @@
 import { h, Component, Fragment } from 'preact';
-import { useEffect, useRef } from 'preact/hooks';
+import { useEffect } from 'preact/hooks';
 import { useSelector } from 'react-redux';
 import b from 'bem-react-helper';
 import { IntlShape, useIntl, FormattedMessage, defineMessages } from 'react-intl';
@@ -8,10 +8,9 @@ import clsx from 'clsx';
 import 'styles/global.css';
 import type { StoreState } from 'store';
 import { COMMENT_NODE_CLASSNAME_PREFIX, MAX_SHOWN_ROOT_COMMENTS, THEMES, IS_MOBILE } from 'common/constants';
-import { maxShownComments, url } from 'common/settings';
+import { maxShownComments, noFooter, url } from 'common/settings';
 
 import {
-  setUser,
   fetchUser,
   blockUser,
   unblockUser,
@@ -20,7 +19,7 @@ import {
   unhideUser,
   signout,
 } from 'store/user/actions';
-import { fetchComments, addComment, updateComment, unsetCommentMode } from 'store/comments/actions';
+import { fetchComments, addComment, updateComment } from 'store/comments/actions';
 import { setCommentsReadOnlyState } from 'store/post-info/actions';
 import { setTheme } from 'store/theme/actions';
 
@@ -36,7 +35,7 @@ import { ConnectedComment as Comment } from 'components/comment/connected-commen
 import { uploadImage, getPreview } from 'common/api';
 import { isUserAnonymous } from 'utils/isUserAnonymous';
 import { bindActions } from 'utils/actionBinder';
-import { postMessageToParent, parseMessage } from 'utils/post-message';
+import { postMessageToParent, parseMessage, updateIframeHeight } from 'utils/post-message';
 import { useActions } from 'hooks/useAction';
 import { setCollapse } from 'store/thread/actions';
 
@@ -66,7 +65,6 @@ const mapStateToProps = (state: StoreState) => ({
 
 const boundActions = bindActions({
   fetchComments,
-  setUser,
   fetchUser,
   fetchBlockedUsers,
   setTheme,
@@ -78,7 +76,6 @@ const boundActions = bindActions({
   addComment,
   updateComment,
   setCollapse,
-  unsetCommentMode,
   signout,
 });
 
@@ -287,10 +284,6 @@ export class Root extends Component<Props, State> {
   }
 }
 
-function updateIframeHeight() {
-  postMessageToParent({ height: document.body.offsetHeight });
-}
-
 interface CommentsProps {
   isLoading: boolean;
   topComments: string[];
@@ -298,34 +291,12 @@ interface CommentsProps {
   showMore(): void;
 }
 function Comments({ isLoading, topComments, commentsShown, showMore }: CommentsProps) {
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!rootRef.current) {
-      return;
-    }
-
-    // TODO: throttle updates
-    const observer = new MutationObserver(() => {
-      updateIframeHeight();
-
-      // a hacky way to force iframe height update when new image is rendered and loaded
-      rootRef.current?.querySelectorAll('img').forEach((img) => {
-        img.addEventListener('load', updateIframeHeight);
-      });
-    });
-
-    observer.observe(rootRef.current, { attributes: true, childList: true, subtree: true });
-
-    return () => observer.disconnect();
-  }, []);
-
   const renderComments =
     IS_MOBILE && commentsShown < topComments.length ? topComments.slice(0, commentsShown) : topComments;
   const isShowMoreButtonVisible = IS_MOBILE && commentsShown < topComments.length;
 
   return (
-    <div className="root__threads" role="list" ref={rootRef}>
+    <div className="root__threads" role="list">
       {isLoading ? (
         <Preloader className="root__preloader" />
       ) : (
@@ -357,16 +328,26 @@ export function ConnectedRoot() {
   const props = useSelector(mapStateToProps);
   const actions = useActions(boundActions);
 
+  useEffect(() => {
+    const observer = new ResizeObserver(() => updateIframeHeight());
+
+    updateIframeHeight();
+    observer.observe(document.body);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div className={clsx(b('root', {}, { theme: props.theme }), props.theme)}>
       <Root {...props} {...actions} intl={intl} />
-      <p className="root__copyright" role="contentinfo">
-        <FormattedMessage
-          id="root.powered-by"
-          defaultMessage="Powered by <a>Remark42</a>"
-          values={{ a: CopyrightLink }}
-        />
-      </p>
+      {!noFooter && (
+        <p className="root__copyright" role="contentinfo">
+          <FormattedMessage
+            id="root.powered-by"
+            defaultMessage="Powered by <a>Remark42</a>"
+            values={{ a: CopyrightLink }}
+          />
+        </p>
+      )}
     </div>
   );
 }

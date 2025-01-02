@@ -72,12 +72,6 @@ export interface Comment {
    */
   hidden?: boolean;
 }
-
-export interface CommentsResponse {
-  comments: Comment[];
-  count: number;
-}
-
 export interface Node {
   comment: Comment;
   replies?: Node[];
@@ -97,6 +91,7 @@ export interface Tree {
 }
 
 export type OAuthProvider =
+  | 'apple'
   | 'facebook'
   | 'twitter'
   | 'google'
@@ -104,6 +99,7 @@ export type OAuthProvider =
   | 'github'
   | 'microsoft'
   | 'patreon'
+  | 'discord'
   | 'telegram'
   | 'dev';
 export type FormProvider = 'email' | 'anonymous';
@@ -124,7 +120,7 @@ export interface Config {
   simple_view: boolean;
   anon_vote: boolean;
   email_notifications: boolean;
-  telegram_bot_username: string;
+  telegram_notifications: boolean;
   emoji_enabled: boolean;
 }
 
@@ -155,9 +151,18 @@ export interface Image {
 
 /** error struct returned in case of api call error */
 export interface ApiError {
-  code: number;
+  /**
+   * Error code, that is part of server error response.
+   * Note that -1 is reserved for error where `error` field shall be used directly
+   */
+  code?: number;
   /** simple explanation */
-  details: string;
+  details?: string;
   /** in-depth explanation */
   error: string;
+}
+
+export interface EmailSubVerificationStatus {
+  updated: boolean;
+  address: string;
 }

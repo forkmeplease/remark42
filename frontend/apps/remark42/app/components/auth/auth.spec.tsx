@@ -74,6 +74,7 @@ describe('<Auth/>', () => {
     [['facebook', 'google', 'microsoft']],
     [['facebook', 'google', 'microsoft', 'yandex']],
     [['facebook', 'google', 'microsoft', 'yandex', 'twitter']],
+    [['facebook', 'google', 'microsoft', 'yandex', 'twitter', 'apple']],
   ] as [OAuthProvider[]][])('should renders with %j providers', async (providers) => {
     StaticStore.config.auth_providers = providers;
 
@@ -158,9 +159,9 @@ describe('<Auth/>', () => {
 
     expect(screen.getByText('Back')).toHaveClass('auth-back-button');
     expect(screen.getByTitle('Close sign-in dropdown')).toHaveClass('auth-close-button');
-    expect(screen.getByPlaceholderText('Token')).toHaveClass('auth-token-textarea');
+    expect(screen.getByPlaceholderText('Copy and paste the token from the email')).toHaveClass('auth-token-textarea');
 
-    fireEvent.change(screen.getByPlaceholderText('Token'), {
+    fireEvent.change(screen.getByPlaceholderText('Copy and paste the token from the email'), {
       target: { value: 'token' },
     });
 
@@ -187,9 +188,9 @@ describe('<Auth/>', () => {
 
     expect(getByText('Back')).toHaveClass('auth-back-button');
     expect(getByTitle('Close sign-in dropdown')).toHaveClass('auth-close-button');
-    expect(getByPlaceholderText('Token')).toHaveClass('auth-token-textarea');
+    expect(getByPlaceholderText('Copy and paste the token from the email')).toHaveClass('auth-token-textarea');
 
-    fireEvent.change(getByPlaceholderText('Token'), { target: { value: 'token' } });
+    fireEvent.change(getByPlaceholderText('Copy and paste the token from the email'), { target: { value: 'token' } });
     fireEvent.click(getByText('Submit'));
     await waitFor(() => expect(utils.getTokenInvalidReason).toBeCalled());
 
